@@ -7,6 +7,17 @@ function textFromHtml(html: string, pattern: RegExp) {
   return match?.[1]?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() || ''
 }
 
+function metaContent(html: string, attribute: string, value: string) {
+  const pattern = new RegExp(`<meta[^>]+${attribute}=["']${value}["'][^>]+content=["']([^"']*)["'][^>]*>`, 'i')
+  return textFromHtml(html, pattern)
+}
+
+function createSummary(html: string, fallback: string) {
+  const candidate = metaContent(html, 'name', 'description') || metaContent(html, 'property', 'og:description') || textFromHtml(html, /<p[^>]*>([\s\S]*?)<\/p>/i) || fallback
+  const words = candidate.split(/\s+/).filter(Boolean)
+  return words.length > 55 ? `${words.slice(0, 55).join(' ')}…` : candidate
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()
@@ -22,7 +33,7 @@ export async function POST(request: Request) {
     })
     const html = response.headers.get('content-type')?.includes('text/html') ? await response.text() : ''
     const title = textFromHtml(html, /<title[^>]*>([\s\S]*?)<\/title>/i) || parsed.hostname.replace(/^www\./, '')
-    const description = textFromHtml(html, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["'][^>]*>/i) || 'A publicly reachable website with no meta description available.'
+    const description = createSummary(html, 'A publicly reachable website with no summary available.')
     const language = html.match(/<html[^>]+lang=["']([^"']+)["']/i)?.[1] || 'Not specified'
 
     return NextResponse.json({
